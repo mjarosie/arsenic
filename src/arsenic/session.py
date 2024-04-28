@@ -4,6 +4,15 @@ from io import BytesIO
 from pathlib import Path
 from typing import Awaitable, Callable, Any, List, Dict, Tuple, Iterator
 
+from __future__ import annotations
+
+try:
+    # Python 3.8 or above
+    from typing import TypedDict
+except ImportError:
+    from typing_extensions import TypedDict
+
+
 import attr
 
 from arsenic import constants
@@ -52,12 +61,24 @@ class RequestHelpers:
         """
         return unwrap(value)
 
-
 class Element(RequestHelpers):
+    
+    WebElementId = TypedDict('WebElementId', {f"{constants.WEB_ELEMENT}": str})
+
+    class WebElement(TypedDict):
+        id: Element.WebElementId | None
+
     def __init__(self, id: str, connection: Connection, session: "Session"):
         self.id = id
         self.connection = connection
         self.session = session
+
+    @staticmethod
+    def _empty_web_element() -> WebElement:
+        return {"id": None}
+
+    def _to_web_element(self) -> WebElement:
+        return {"id": {constants.WEB_ELEMENT: self.id}}
 
     async def get_text(self) -> str:
         return await self._request(url="/text", method="GET")
@@ -302,8 +323,8 @@ class Session(RequestHelpers):
     async def close(self):
         await self._request(url="", method="DELETE")
 
-    def create_element(self, element_id):
-        return self.element_class(
+    def create_element(self, element_id) -> Element:
+        return Element(
             element_id, self.connection.prefixed(f"/element/{element_id}"), self
         )
 
@@ -321,6 +342,16 @@ class Session(RequestHelpers):
     async def new_window(self, window_type: WindowType = WindowType.tab):
         return await self._request(
             url="/window/new", method="POST", data={"type": window_type.value}
+        )
+
+    async def switch_to_frame(self, el: Element) -> None:
+        return await self._request(
+            url="/frame", method="POST", data=el._to_web_element()
+        )
+
+    async def switch_to_default_frame(self) -> None:
+        return await self._request(
+            url="/frame", method="POST", data=Element._empty_web_element()
         )
 
 
